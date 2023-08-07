@@ -1,0 +1,43 @@
+
+def generate_and_near_sql(group, block_id):
+    block_combo_logic = group['block_combo_logic'].iloc[0]
+    block_operator = group['operator'].iloc[0].lower()
+
+    # ... [Rest of the initialization as in your code]
+
+    # Join all include SQL queries into one
+    if include_sql_queries:
+        include_subqueries = [f"({sql}) AS t{i}" for i, sql in enumerate(include_sql_queries, start=1)]
+        if len(include_subqueries) > 1:
+            if block_operator == 'and':
+                join_condition = ' '.join(f'INNER JOIN {subquery} ON t1.r_id = t{i+1}.r_id' for i, subquery in enumerate(include_subqueries[1:], start=1))
+            elif block_operator == 'near':
+                join_condition = ' '.join(f'INNER JOIN {subquery} ON t1.r_id = t{i+1}.r_id AND ABS(t1.seq - t{i+1}.seq) <= {prox_m_seconds}' for i, subquery in enumerate(include_subqueries[1:], start=1))
+        else:
+            join_condition = ''
+        from_clause = f"FROM {include_subqueries[0]} {join_condition}"
+    else:
+        from_clause = ""
+
+    # Handle exclude matches
+    if exclude_sql_queries:
+        exclude_subqueries = [f"({sql}) AS te{i}" for i, sql in enumerate(exclude_sql_queries, start=1)]
+        exclude_on_conditions = ' '.join([f'LEFT JOIN {subquery} ON t1.r_id = te{i}.r_id' for i, subquery in enumerate(exclude_subqueries, start=1)])
+        where_condition = f'WHERE {" AND ".join([f"te{i}.r_id IS NULL" for i in range(1, len(exclude_subqueries) + 1)])}'
+    else:
+        exclude_on_conditions = ""
+        where_condition = ""
+
+    # Construct the final SQL
+    final_sql = textwrap.dedent(f"""
+    SELECT
+      t1.r_id,
+      t1.seq,
+      '{block_id}' AS block_id,
+      '{block_combo_logic}' AS block_combo_logic,
+      t1.phrase_operator
+    {from_clause}
+    {exclude_on_conditions} 
+    {where_condition}
+    """)
+    return final_sql
