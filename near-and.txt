@@ -1,0 +1,49 @@
+def generate_final_sql(input_data_df):
+    # Get the unique blocks in the data
+    blocks = input_data_df['block'].unique()
+
+    # Split blocks into include and exclude groups
+    include_blocks = [block for block in blocks if input_data_df[input_data_df['block'] == block]['phrase_operator'].values[0] == 'include matches']
+    exclude_blocks = [block for block in blocks if input_data_df[input_data_df['block'] == block]['phrase_operator'].values[0] == 'exclude matches']
+
+    def construct_sql(base_query, include_blocks, join_type, additional_clause):
+        # Construct the main SQL
+        sql = f"{base_query}\n"
+        
+        # Handle included blocks
+        inclusions = "\n".join([f"{join_type}\nFROM {block}_results" for block in include_blocks[1:]])
+        sql += inclusions
+        
+        # Handle excluded blocks
+        where_clause = "\nWHERE "
+        for i, block in enumerate(exclude_blocks):
+            sql += f"\nLEFT JOIN {block}_results AS te{i+1}\nON t1.r_id = te{i+1}.r_id"
+            where_clause += f"te{i+1}.r_id IS NULL\nAND "
+        
+        if exclude_blocks:
+            sql += where_clause.rstrip("AND ")
+        
+        return f"{sql}{additional_clause}"
+    
+    # Generate 'all' and 'any' SQL based on the definitions
+    all_sql = construct_sql(
+        base_query=f"SELECT t1.r_id, t1.seq\nFROM {include_blocks[0]}_results AS t1",
+        include_blocks=include_blocks,
+        join_type="INNER JOIN",
+        additional_clause="\nGROUP BY r_id, seq"
+    )
+    
+    any_sql = construct_sql(
+        base_query=f"SELECT r_id, seq\nFROM {include_blocks[0]}_results AS t1",
+        include_blocks=include_blocks,
+        join_type="UNION ALL",
+        additional_clause=""
+    )
+    
+    # Return the final SQL based on the block combo logic
+    if input_data_df['block_combo_logic'].values[0] == 'all blocks':
+        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_id} AS (\n{all_sql}\n)"""
+        return final_sql
+    elif input_data_df['block_combo_logic'].values[0] == 'any block':
+        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_id} AS (\nSELECT * FROM (\n{any_sql})\nGROUP BY r_id, seq \n)"""
+        return final_sql
