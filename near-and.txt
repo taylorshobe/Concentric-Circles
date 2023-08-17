@@ -1,0 +1,46 @@
+def generate_and_near_sql(group, block_id):
+
+    block_combo_logic = group['block_combo_logic'].iloc[0]
+    block_operator = group['operator'].iloc[0]
+
+    # Loop over each row in the group and generate a SQL query
+    include_sql_queries = []
+    exclude_sql_queries = []
+
+    for i, row in group.iterrows():
+        sql = generate_phrase_sql(row, block_id, row['phrase_group_id'])
+        prox_seconds = float(row['proximity']) if row['proximity'] else None
+        prox_m_seconds = prox_seconds * 1000 if prox_seconds else None
+
+        if row['phrase_operator'].lower() == 'include matches':
+            include_sql_queries.append(sql)
+        elif row['phrase_operator'].lower() == 'exclude matches':
+            exclude_sql_queries.append(sql)
+
+    include_subqueries = [f"({sql}) AS t{i+1}" for i, sql in enumerate(include_sql_queries)]
+    select_columns = ",\n".join([f"t{i+1}.*" for i in range(len(include_subqueries))]) # Selecting all columns including phrase_group_id
+
+    join_conditions = []
+    if len(include_subqueries) > 1:
+        if block_operator.lower() == 'and':
+            join_conditions = ' '.join(f'INNER JOIN {subquery} ON t1.r_id = t{i+2}.r_id' for i, subquery in enumerate(include_subqueries[1:]))
+        elif block_operator.lower() == 'near':
+            join_conditions = ' '.join(f'INNER JOIN {subquery} ON t1.r_id = t{i+2}.r_id AND ABS(t1.block_id_{block_id}_t1_seq - t{i+2}.block_id_{block_id}_t{i+2}_seq) <= {prox_m_seconds}' for i, subquery in enumerate(include_subqueries[1:]))
+
+    exclude_subqueries = [f"({sql}) AS te{i+1}" for i, sql in enumerate(exclude_sql_queries)]
+    exclude_on_conditions = ' '.join([f'LEFT JOIN {subquery} ON t1.r_id = te{i+1}.r_id' for i, subquery in enumerate(exclude_subqueries)])
+    where_condition = f'WHERE {" AND ".join([f"te{i+1}.r_id IS NULL" for i in range(len(exclude_subqueries))])}' if exclude_subqueries else ''
+
+    final_sql = textwrap.dedent(f"""
+    SELECT
+      t1.r_id,
+      '{block_id}' AS block_id,
+      '{block_combo_logic}' AS block_combo_logic,
+      {select_columns}
+    FROM {include_subqueries[0]}
+    {' '.join(join_conditions)}
+    {exclude_on_conditions}
+    {where_condition}
+    """)
+
+    return final_sql
