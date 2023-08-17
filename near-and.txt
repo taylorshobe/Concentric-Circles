@@ -1,0 +1,47 @@
+def generate_and_near_sql(group, block_id):
+    block_combo_logic = group['block_combo_logic'].iloc[0]
+    block_operator = group['operator'].iloc[0]
+
+    # Loop over each row in the group and generate a SQL query
+    include_sql_queries = []
+    exclude_sql_queries = []
+
+    for i, row in group.iterrows():
+        sql = generate_phrase_sql(row, block_id)
+
+        # Proximity Condition for "NEAR" operator
+        prox_seconds = float(row['proximity']) if row['proximity'] else None
+        prox_m_seconds = prox_seconds * 1000 if prox_seconds else None
+
+        if row['phrase_operator'].lower() == 'include matches':
+            include_sql_queries.append(sql)
+        elif row['phrase_operator'].lower() == 'exclude matches':
+            exclude_sql_queries.append(sql)
+
+    # Join all include queries into one
+    join_conditions = []
+    if include_sql_queries:
+        if block_operator.lower() == 'and':
+            join_conditions = ' '.join(f'\nINNER JOIN ({sql}) AS t{i+1} ON t1.r_id = t{i+1}.r_id' for i, sql in enumerate(include_sql_queries[1:], start=1))
+        elif block_operator.lower() == 'near':
+            join_conditions = ' '.join(f'\nINNER JOIN ({sql}) AS t{i+1} ON t1.r_id = t{i+1}.r_id AND ABS(t1.seq - t{i+1}.seq) <= {prox_m_seconds}' for i, sql in enumerate(include_sql_queries[1:], start=1))
+
+    from_clause = f"FROM ({include_sql_queries[0]}) AS t1 {join_conditions}"
+
+    # Handle exclude matches
+    if exclude_sql_queries:
+        exclude_on_conditions = ' '.join([f'\nLEFT JOIN ({sql}) AS te{i+1} ON t1.r_id = te{i+1}.r_id' for i, sql in enumerate(exclude_sql_queries)])
+        where_condition = f'WHERE {" AND ".join([f"te{i+1}.r_id IS NULL" for i in range(len(exclude_sql_queries))])}'
+    else:
+        exclude_on_conditions = ""
+        where_condition = ""
+
+    # Construct the final SQL
+    final_sql = textwrap.dedent(f"""
+    SELECT t1.*
+    {from_clause}
+    {exclude_on_conditions}
+    {where_condition}
+    """) 
+
+    return final_sql
