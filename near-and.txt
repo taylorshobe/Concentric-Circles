@@ -1,0 +1,77 @@
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def calculate_total_phrase_groups(dataframe):
+    single_phrase_blocks = dataframe[dataframe['standalone_pg']]
+    single_phrase_counts = single_phrase_blocks['block_id'].value_counts()
+
+    multi_phrase_blocks = dataframe[~dataframe['standalone_pg']]
+    filtered_multi_phrase_blocks = multi_phrase_blocks[multi_phrase_blocks['phrase_operator'] != 'exclude matches']
+    multi_phrase_counts = filtered_multi_phrase_blocks.groupby('block_id')['phrase_group_id'].nunique()
+
+    return pd.concat([single_phrase_counts, multi_phrase_counts])
+
+def standardize_temp_table(block_id, total_phrase_counts):
+    logging.info(f"Standardizing temp table for block_id: {block_id}")
+
+    num_phrase_groups = total_phrase_counts[block_id]
+    union_selects = [f"""
+        SELECT r_id, block_id, block_combo_logic, operator,
+        t{i}_phrase_group_id AS phrase_group_id, t{i}_phrase_operator AS phrase_operator,
+        t{i}_pcd AS pcd, t{i}_seq AS seq, t{i}_utterance AS utterance
+        FROM {block_id}_results
+    """ for i in range(1, num_phrase_groups + 1)]
+    
+    final_sql = "\nUNION ALL\n".join(union_selects)
+
+    new_table_name = f"{block_id}_transformed_results"
+    create_table_sql = f"CREATE OR REPLACE TABLE `{new_table_name}` AS {final_sql}"
+
+    try:
+        gcp_cursor.execute(create_table_sql)
+        logging.info(f"Successfully created transformed table for block_id {block_id}")
+    except Exception as e:
+        logging.error(f"Error while creating table for block_id {block_id}. Error: {e}")
+        return None
+
+    sample_sql = f"SELECT * FROM {new_table_name} LIMIT 5"
+    gcp_cursor.execute(sample_sql)
+    sample = gcp_cursor.fetchall()
+    logging.info(f"Sample from {new_table_name}:\n{sample}")
+
+    return final_sql
+
+def execute_standardize_temp_table(dataframe):
+    block_ids = dataframe['block_id'].unique()
+    total_phrase_counts = calculate_total_phrase_groups(dataframe)
+
+    for block_id in block_ids:
+        logging.info(f"Processing block {block_id}")
+        standardize_temp_table(block_id, total_phrase_counts)
+
+# Assuming data is defined somewhere above
+input_data_df = pd.DataFrame(data)
+input_data_df['phrase_group_id'] = input_data_df.groupby('block_id').cumcount() + 1
+input_data_df['standalone_pg'] = input_data_df.groupby('block_id')['block_id'].transform(len) == 1
+
+clean_data_df = input_data_df.apply(clean_data, axis=1)
+
+# Assuming process_blocks is defined somewhere above
+grouped = clean_data_df.groupby('block_id')
+df_sql_queries = process_blocks(grouped)
+
+base_columns = 4  # r_id, block_id, block_combo_logic, operator
+columns_per_phrase_group = 4  # phrase_group_id, phrase_operator, seq, phrase
+
+total_phrase_counts = calculate_total_phrase_groups(clean_data_df)
+for block_id, count in total_phrase_counts.items():
+    total_columns = base_columns + (count * columns_per_phrase_group)
+    logging.info(f"Expected number of columns in {block_id}_results: {total_columns}")
+
+# Assuming execute_queries_from_dataframe is defined somewhere above
+execute_queries_from_dataframe(df_sql_queries)
+
+# Execute the standardization of temp tables
+execute_standardize_temp_table(clean_data_df)
