@@ -1,67 +1,48 @@
-def generate_final_sql(clean_data_df):
 
-    def construct_sql(base_query, include_blocks, join_type, additional_clause):
-        # Construct the main SQL
-        sql = f"{base_query}\n"
+def generate_final_sql(cleaned_data_df):
+    try:
+        final_sql_list = []
+        
+        # Get the unique blocks in the data
+        blocks = cleaned_data_df['block_id'].unique()
+        query_key = cleaned_data_df['query_key'].iloc[0]
 
-        # Handle included blocks
-        if join_type == "UNION ALL":
-            inclusions = "\n".join([f"{join_type}\nSELECT t1_r_id, t1_pcd, t1_seq, t1_utterance\nFROM {block_id}_results" for block_id in include_blocks[1:]])
+        # Split blocks into include and exclude groups
+        include_blocks = [block_id for block_id in blocks if cleaned_data_df[cleaned_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'INCLUDE MATCHES']
+        exclude_blocks = [block_id for block_id in blocks if cleaned_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'EXCLUDE MATCHES']
+
+        # Sort Blocks
+        include_blocks.sort()
+        exclude_blocks.sort()
+        
+        # Group by block_id to process each block of phrases
+        for block_id, block_group in cleaned_data_df.groupby('block_id'):
+            # Check if block has a single Phrase Group and is standalone
+            is_standalone = block_group['standalone_pg'].iloc[0]
+            prefix = "t1_" if is_standalone else ""
+            
+            # Identify the type of operator being used for the block
+            if block_group['operator'].iloc[0].lower() == 'none':
+                final_sql_list.append(generate_none_sql(block_group, block_id))
+                
+            elif block_group['operator'].iloc[0].lower() in ['and', 'near']:
+                # We will be modifying the existing generate_and_near_sql function
+                final_sql_list.append(generate_and_near_sql(block_group, block_id, prefix))
+                
+            else:
+                for _, row in block_group.iterrows():
+                    final_sql_list.append(generate_phrase_sql(row, block_id, prefix))
+        
+        # Return the final SQL based on the block combo logic
+        if cleaned_data_df['block_combo_logic'].values[0] == 'ALL BLOCKS':
+            # If all blocks must be combined, we will generate a UNION of all the SQLs
+            final_sql = "\n\nUNION ALL\n\n".join(final_sql_list)
         else:
-            inclusions = "\n".join([f"{join_type}\n{block_id}_results AS t{i+2} ON t1.t1_r_id = t{i+2}.t1_r_id" for i, block_id in enumerate(include_blocks[1:])])
-        sql += inclusions
-
-        # Handle excluded blocks
-        where_clause = "\nWHERE "
-        for i, block_id in enumerate(exclude_blocks):
-            sql += f"\nLEFT JOIN {block_id}_results AS te{i+1}\nON t1.t1_r_id = te{i+1}.t1_r_id"
-            where_clause += f"te{i+1}.t1_r_id IS NULL\nAND "
-
-        if exclude_blocks:
-            sql += where_clause.rstrip("AND ")
-
-        return f"{sql}{additional_clause}"
-
-    # Begin main logic of generate_final_sql function
-
-    # Get the unique blocks in the data
-    blocks = clean_data_df['block_id'].unique()
-    query_key = clean_data_df['query_key'].iloc[0]
-
-    # Split blocks into include and exclude groups
-    include_blocks = [block_id for block_id in blocks if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'INCLUDE MATCHES']
-    exclude_blocks = [block_id for block_id in blocks if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'EXCLUDE MATCHES']
-
-    # Sort Blocks
-    include_blocks.sort()
-    exclude_blocks.sort()
-
-    # Check if any of the include Blocks are empty and return early if so
-    if not include_blocks:
-        print("No results found for the given Block ID. Exiting ...")
-        return ""
-
-    # Generate 'all' and 'any' SQL based on the definitions
-    all_sql = construct_sql(
-        base_query=f"SELECT t1.t1_r_id, t1.t1_pcd, t1.t1_seq, t1.t1_utterance\nFROM {include_blocks[0]}_results AS t1",
-        include_blocks=include_blocks,
-        join_type="INNER JOIN",
-        additional_clause="\nGROUP BY t1_r_id, t1_pcd, t1_seq, t1_utterance"
-    )
-
-    any_sql = construct_sql(
-        base_query=f"SELECT t1.t1_r_id, t1.t1_pcd, t1.t1_seq, t1.t1_utterance\nFROM {include_blocks[0]}_results AS t1",
-        include_blocks=include_blocks,
-        join_type="UNION ALL",
-        additional_clause=""
-    )
-
-    # Return the final SQL based on the block combo logic
-    if clean_data_df['block_combo_logic'].values[0] == 'ALL BLOCKS':
-        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_key} AS (\n\n{all_sql}\n)"""
-        print(f"Generated 'all blocks' SQL:\n\n{final_sql}\n")
+            # Otherwise, you'd generate the SQL based on specific logic you've determined for other 'block_combo_logic' values
+            # Placeholder: Modify this part as per your requirement
+            final_sql = "\n\n-- PLACEHOLDER FOR OTHER LOGIC --\n\n".join(final_sql_list)
+        
         return final_sql
-    elif clean_data_df['block_combo_logic'].values[0] == 'ANY BLOCK':
-        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_key} AS (\nSELECT * FROM (\n\n{any_sql}\n) GROUP BY t1_r_id, t1_pcd, t1_seq, t1_utterance)\n"""
-        print(f"Generated 'any block' SQL:\n\n{final_sql}\n")
-        return final_sql
+    except Exception as e:
+        print(f"Error generating final SQL: {str(e)}")
+        return None
