@@ -1,0 +1,41 @@
+def generate_final_sql(block_ids, query_key, clean_data_df):
+    logging.info(f"Generating final SQL for query key: {query_key}")
+
+    total_phrase_counts = calculate_total_phrase_groups(clean_data_df)
+
+    # Construct CTEs for each block
+    ctes = []
+    for block_id in block_ids:
+        table_name = f"{block_id}_transformed_results"
+        ctes.append(f"{table_name} AS (\nSELECT * FROM {table_name}\n)")
+
+    # Check the block combo logic and build the main SQL query
+    if 'ANY BLOCK' in clean_data_df['block_combo_logic'].values:
+        logging.info("Combining using 'ANY BLOCK' logic.")
+        main_query = "\nUNION ALL\n".join([f"SELECT * FROM {block_id}_transformed_results" for block_id in block_ids])
+    else:
+        logging.info("Combining using 'ALL BLOCKS' logic.")
+        inclusion_blocks = []
+        exclusion_blocks = []
+
+        for block_id in block_ids:
+            block_operator = clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].iloc[0]
+            table_name = f"{block_id}_transformed_results"
+            if block_operator == 'INCLUDE MATCHES':
+                inclusion_blocks.append(table_name)
+            else:
+                exclusion_blocks.append(table_name)
+
+        all_inclusions = " \nINNER JOIN\n ".join([f"{block} USING (r_id)" for block in inclusion_blocks])
+
+        if exclusion_blocks:
+            all_exclusions = " AND ".join([f"r_id NOT IN (SELECT r_id FROM {block})" for block in exclusion_blocks])
+            main_query = f"SELECT * FROM {all_inclusions} WHERE {all_exclusions}"
+        else:
+            main_query = f"SELECT * FROM {all_inclusions}"
+
+    # Combine the CTE section and the main query
+    final_sql = f"WITH\n{cte_section}\n{main_query}"
+
+    logging.info(f"Generated SQL:\n{final_sql}")
+    return final_sql
