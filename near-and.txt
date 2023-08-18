@@ -1,0 +1,60 @@
+
+
+def fetch_single_row_from_bq(table_name):
+    """Fetch a single row from the specified BigQuery table."""
+    sql = f"SELECT * FROM `{table_name}` LIMIT 1"
+    return client.query(sql).to_dataframe()
+
+
+def get_phrase_columns_count(df):
+    """Function to get the number of phrase groups by counting 'phrase' columns in a DataFrame."""
+    return len([col for col in df.columns if '_phrase' in col])
+
+
+unique_block_ids = clean_data_df['block_id'].unique()
+table_names = [f"{block_id}_results" for block_id in unique_block_ids]
+
+
+for table in table_names:
+    df = fetch_single_row_from_bq(table)
+    
+    phrase_col_count = get_phrase_columns_count(df)
+    print(f"Number of phrase columns in {table}: {phrase_col_count}")
+
+
+
+
+
+
+
+# Identify blocks with standalone phrase groups
+single_phrase_blocks = clean_data_df[clean_data_df['standalone_pg']]
+
+# For these blocks, we count all phrase groups, even if they are exclusionary
+single_phrase_counts = single_phrase_blocks['block_id'].value_counts()
+
+# Remove standalone phrase groups from the original dataframe
+multi_phrase_blocks = clean_data_df[~clean_data_df['standalone_pg']]
+
+# Filter out exclusionary phrase groups from non-standalone blocks
+filtered_multi_phrase_blocks = multi_phrase_blocks[multi_phrase_blocks['phrase_operator'] != 'exclude matches']
+
+# Count unique phrase_group_id values for each of the non-standalone block_id
+multi_phrase_counts = filtered_multi_phrase_blocks.groupby('block_id')['phrase_group_id'].nunique()
+
+# Combine the two series: single_phrase_counts and multi_phrase_counts
+total_phrase_counts = pd.concat([single_phrase_counts, multi_phrase_counts])
+
+for block_id, count in total_phrase_counts.items():
+    print(f"Number of phrase groups in {block_id}_results: {count}")
+
+base_columns = 4  # r_id, block_id, block_combo_logic, operator
+columns_per_phrase_group = 4  # phrase_group_id, phrase_operator, seq, phrase
+
+for block_id, count in total_phrase_counts.items():
+    total_columns = base_columns + (count * columns_per_phrase_group)
+    print(f"Expected number of columns in {block_id}_results: {total_columns}")
+
+
+
+
