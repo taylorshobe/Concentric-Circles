@@ -1,0 +1,156 @@
+def generate_final_sql(clean_data_df):
+
+    blocks = clean_data_df['block_id'].unique()
+    query_key = clean_data_df['query_key'].iloc[0]
+
+    # Split blocks into include and exclude groups
+    include_blocks = [block_id for block_id in blocks if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'INCLUDE MATCHES']
+    exclude_blocks = [block_id for block_id in blocks if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'EXCLUDE MATCHES']
+
+    # Sort Blocks
+    include_blocks.sort()
+    exclude_blocks.sort()
+
+    # Check if any of the include Blocks are empty and return early if so
+    if not include_blocks:
+        print("No results found for the given Block ID. Exiting ...")
+        return ""
+
+    def construct_sql(base_query, include_blocks, join_type, additional_clause):
+        # Construct the main SQL
+        sql = f"{base_query}\n"
+
+        # Handle included blocks
+        if join_type == "UNION ALL":
+            inclusions = "\n".join([f"{join_type}\nSELECT r_id, pcd, seq, utterance\nFROM {block_id}_results" for block_id in include_blocks[1:]])
+        else:
+            # Note: Modified this line to always expect the t{i}_ prefix.
+            inclusions = "\n".join([f"{join_type}\n{block_id}_results AS t{i+2} ON t1.r_id = t{i+2}.r_id AND t1.seq = t{i+2}.t{i+2}_seq AND ..." for i, block_id in enumerate(include_blocks[1:])])
+        sql += inclusions
+
+        # Handle excluded blocks
+        where_clause = "\nWHERE "
+        for i, block_id in enumerate(exclude_blocks):
+            sql += f"\nLEFT JOIN {block_id}_results AS te{i+1}\nON t1.r_id = te{i+1}.r_id"
+            where_clause += f"te{i+1}.r_id IS NULL\nAND "
+
+        if exclude_blocks:
+            sql += where_clause.rstrip("AND ")
+
+        return f"{sql}{additional_clause}"
+
+    # Generate 'all' and 'any' SQL based on the definitions
+    all_sql = construct_sql(
+        base_query=f"SELECT t1.r_id, t1.pcd, t1.seq, t1.utterance\nFROM {include_blocks[0]}_results AS t1",
+        include_blocks=include_blocks,
+        join_type="INNER JOIN",
+        additional_clause="\nGROUP BY r_id, pcd, seq, utterance"
+    )
+
+    any_sql = construct_sql(
+        base_query=f"SELECT t1.r_id, t1.pcd, t1.seq, t1.utterance\nFROM {include_blocks[0]}_results AS t1",
+        include_blocks=include_blocks,
+        join_type="UNION ALL",
+        additional_clause=""
+    )
+
+    # Return the final SQL based on the block combo logic
+    if clean_data_df['block_combo_logic'].values[0] == 'ALL BLOCKS':
+        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_key} AS (\n\n{all_sql}\n)"""
+        print(f"Generated 'all blocks' SQL:\n\n{final_sql}\n")
+        return final_sql
+    elif clean_data_df['block_combo_logic'].values[0] == 'ANY BLOCK':
+        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_key} AS (\nSELECT * FROM (\n\n{any_sql})\nGROUP BY r_id, pcd, seq, utterance\n)\n"""
+        print(f"Generated 'any block' SQL:\n\n{final_sql}\n")
+        return final_sql
+
+
+
+
+
+
+
+
+
+def generate_final_sql(clean_data_df):
+
+    # Define helper functions within generate_final_sql
+
+    def has_prefixed_columns(block_id):
+        # Check if this result table has columns with the prefix.
+        # This can be a `DESCRIBE table` query or another method depending on your database system.
+        # Return True if the table contains prefixed columns, else False.
+
+        columns = describe_table(f"{block_id}_results")  # Pseudo function; you'd need to replace this with actual logic.
+        return any(column.startswith(f"t{block_id}_") for column in columns)
+
+    def construct_sql(base_query, include_blocks, join_type, additional_clause):
+        # Construct the main SQL
+        sql = f"{base_query}\n"
+
+        # Handle included blocks
+        if join_type == "UNION ALL":
+            inclusions = "\n".join([f"{join_type}\nSELECT r_id, pcd, seq, utterance\nFROM {block_id}_results" for block_id in include_blocks[1:]])
+        else:
+            inclusions = ""
+            for i, block_id in enumerate(include_blocks[1:]):
+                if has_prefixed_columns(block_id):
+                    inclusions += f"{join_type}\n{block_id}_results AS t{i+2} ON t1.r_id = t{i+2}.r_id AND t1.seq = t{i+2}.t{i+2}_seq AND ..."
+                else:
+                    inclusions += f"{join_type}\n{block_id}_results AS t{i+2} ON t1.r_id = t{i+2}.r_id AND t1.seq = t{i+2}.seq AND ..."
+            sql += inclusions
+
+        # Handle excluded blocks
+        where_clause = "\nWHERE "
+        for i, block_id in enumerate(exclude_blocks):
+            sql += f"\nLEFT JOIN {block_id}_results AS te{i+1}\nON t1.r_id = te{i+1}.r_id"
+            where_clause += f"te{i+1}.r_id IS NULL\nAND "
+
+        if exclude_blocks:
+            sql += where_clause.rstrip("AND ")
+
+        return f"{sql}{additional_clause}"
+
+    # Begin main logic of generate_final_sql function
+
+    # Get the unique blocks in the data
+    blocks = clean_data_df['block_id'].unique()
+    query_key = clean_data_df['query_key'].iloc[0]
+
+    # Split blocks into include and exclude groups
+    include_blocks = [block_id for block_id in blocks if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'INCLUDE MATCHES']
+    exclude_blocks = [block_id for block_id in blocks if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].values[0] == 'EXCLUDE MATCHES']
+
+    # Sort Blocks
+    include_blocks.sort()
+    exclude_blocks.sort()
+
+    # Check if any of the include Blocks are empty and return early if so
+    if not include_blocks:
+        print("No results found for the given Block ID. Exiting ...")
+        return ""
+
+    # Generate 'all' and 'any' SQL based on the definitions
+    all_sql = construct_sql(
+        base_query=f"SELECT t1.r_id, t1.pcd, t1.seq, t1.utterance\nFROM {include_blocks[0]}_results AS t1",
+        include_blocks=include_blocks,
+        join_type="INNER JOIN",
+        additional_clause="\nGROUP BY r_id, pcd, seq, utterance"
+    )
+
+    any_sql = construct_sql(
+        base_query=f"SELECT t1.r_id, t1.pcd, t1.seq, t1.utterance\nFROM {include_blocks[0]}_results AS t1",
+        include_blocks=include_blocks,
+        join_type="UNION ALL",
+        additional_clause=""
+    )
+
+    # Return the final SQL based on the block combo logic
+    if clean_data_df['block_combo_logic'].values[0] == 'ALL BLOCKS':
+        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_key} AS (\n\n{all_sql}\n)"""
+        print(f"Generated 'all blocks' SQL:\n\n{final_sql}\n")
+        return final_sql
+    elif clean_data_df['block_combo_logic'].values[0] == 'ANY BLOCK':
+        final_sql = f"""CREATE OR REPLACE TEMPORARY TABLE {query_key} AS (\nSELECT * FROM (\n\n{any_sql})\nGROUP BY r_id, pcd, seq, utterance\n)\n"""
+        print(f"Generated 'any block' SQL:\n\n{final_sql}\n")
+        return final_sql
