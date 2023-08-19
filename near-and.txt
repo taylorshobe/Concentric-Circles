@@ -1,0 +1,59 @@
+def generate_final_sql(block_ids, query_key, clean_data_df):
+
+    logging.info(f"Generating final SQL for query key: {query_key}")
+
+    # Columns that will be grouped by (adjust as needed)
+    all_columns = ['T1.r_id', 'T1.block_id', 'T1.block_combo_logic', 'T1.phrase_group_id', 'T1.phrase_operator', 'T1.pcd', 'T1.seq', 'T1.utterance']
+    
+    # Check the block combo logic and build the main SQL query
+    if 'ANY BLOCK' in clean_data_df['block_combo_logic'].values:
+        logging.info("Combining using 'ANY BLOCK' logic.")
+        
+        main_query = "\nUNION ALL\n".join([f"SELECT * FROM {block_id}_transformed_results" for block_id in block_ids])
+        main_query += f"\nGROUP BY {', '.join(all_columns)}"
+        final_sql = f"\nCREATE OR REPLACE TEMPORARY TABLE {query_key} AS \n{main_query}"
+
+    else:  # 'ALL BLOCKS' logic
+        logging.info("Combining using 'ALL BLOCKS' logic.")
+
+        inclusion_blocks = []
+        exclusion_blocks = []
+
+        for block_id in block_ids:
+    	    if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].iloc[0] == 'INCLUDE MATCHES':
+        	inclusion_blocks.append(block_id)
+     	    else:
+        	exclusion_blocks.append(block_id)
+
+
+        # Create intersection CTE
+        inclusion_joins = " ".join([f"INNER JOIN {block}_transformed_results ON A.r_id = {block}_transformed_results.r_id" for block in inclusion_blocks[1:]])
+        exclusion_joins = " AND ".join([f"A.r_id NOT IN (SELECT r_id FROM {block}_transformed_results)" for block in exclusion_blocks])
+
+        cte = f"""
+        WITH intersection AS (
+            SELECT A.*
+            FROM {inclusion_blocks[0]}_transformed_results AS A
+            {inclusion_joins}
+            {"LEFT JOIN " + " AND ".join([f"{block}_transformed_results ON A.r_id = {block}_transformed_results.r_id" for block in exclusion_blocks]) if exclusion_blocks else ""}
+            WHERE {exclusion_joins if exclusion_blocks else "1=1"}
+        )
+        """
+
+        # Union only inclusionary blocks
+        union_query = "\nUNION ALL\n".join([f"SELECT * FROM {block}_transformed_results" for block in inclusion_blocks])
+        main_query = f"""
+        SELECT * 
+        FROM (
+            {union_query}
+        ) T1
+        INNER JOIN intersection T2 ON T1.r_id = T2.r_id
+        GROUP BY {', '.join(all_columns)}
+        """
+        
+        # Combine the CTE and the main query
+        final_sql = f"\nCREATE OR REPLACE TEMPORARY TABLE {query_key} AS\n{cte}\n{main_query}"
+
+    logging.info(f"Generated SQL:\n{final_sql}")
+
+    return final_sql
