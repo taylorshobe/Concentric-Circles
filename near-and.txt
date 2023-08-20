@@ -1,0 +1,29 @@
+def generate_union_sql(inclusion_blocks):
+    """
+    Generates the UNION ALL SQL for the provided inclusionary blocks.
+    """
+    return "\nUNION ALL\n".join([f"SELECT * FROM {block}_transformed_results" for block in inclusion_blocks])
+
+def generate_final_sql(block_ids, clean_data_df, query_key):
+    all_columns = ['T1.r_id', 'T1.block_id', 'T1.block_combo_logic', 'T1.phrase_group_id', 
+                   'T1.phrase_operator', 'T1.pcd', 'T1.seq', 'T1.utterance']
+
+    # Identify the inclusionary blocks from the block_ids
+    inclusion_blocks = [block_id for block_id in block_ids if clean_data_df[clean_data_df['block_id'] == block_id]['phrase_operator'].iloc[0] == 'INCLUDE MATCHES']
+    
+    union_sql = generate_union_sql(inclusion_blocks)
+    
+    final_sql = f"""
+CREATE OR REPLACE TEMPORARY TABLE {query_key} AS 
+SELECT * 
+FROM (
+    {union_sql}
+) T1
+GROUP BY {', '.join(all_columns)}
+    """
+    return final_sql
+
+# Test
+block_ids_test = ['A', 'B', 'C']
+# Assuming 'clean_data_df' contains information about which blocks are inclusionary/exclusionary
+print(generate_final_sql(block_ids_test, clean_data_df, 'q_test123'))
