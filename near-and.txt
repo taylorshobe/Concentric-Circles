@@ -1,0 +1,44 @@
+import logging
+
+# Function to highlight phrases in a conversation
+def highlight_phrases(conversation, phrases):
+    logging.info(f"Original conversation: {conversation}")
+    for phrase_group in phrases:
+        for phrase in phrase_group.split(","):
+            phrase = phrase.strip()
+            conversation = re.sub(r'(?<!<span style="background-color: yellow;">)\b{}\b(?!<\/span>)'.format(phrase), r'<span style="background-color: yellow;">\1</span>', conversation)
+    logging.info(f"Modified conversation: {conversation}")
+    return conversation
+
+# Inside the callback function:
+
+# Execute function on input data
+df_clean_data = df_input_data.apply(clean_data, axis=1)
+logging.info("Cleaned data passed thru from user:\n" + df_clean_data.to_string()) 
+
+# Execute Validation SQL
+validate_transcript = generate_transcript_sql(query_key)
+execute_transcript_sql(validate_transcript, query_key)       
+
+# Randomly sample 500 records and store as Pandas Dataframe
+df_transcript_sample = pd.read_sql(f"SELECT * FROM validate_transcript", gcp_connection)
+
+# For Highlighting matches in Transcript
+def update_output(input_value):
+    # Extract all Phrase Group Values
+    all_phrases = df_clean_data['phrase_group'].tolist()
+    logging.info(f"Extracted Phrases: {all_phrases}")
+    
+    # Apply the highlighting
+    df_transcript_sample['conversation'] = df_transcript_sample['conversation'].apply(lambda x: highlight_phrases(x, all_phrases))
+    
+    return df_transcript_sample.to_dict('records') 
+
+table_data = df_results_sample.to_dict("records")
+table_columns = [{"name": i, "id": i} for i in df_results_sample.columns]
+
+# Validation Sample: table
+table_data_validate = df_transcript_sample.to_dict("records")
+table_columns_validate = [{"name": i, "id": i} for i in df_transcript_sample.columns] 
+
+return True, no_update, final_results, table_data, table_columns, table_data_validate, table_columns_validate
