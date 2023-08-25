@@ -1,0 +1,41 @@
+
+import dash_html_components as html
+
+def highlight_phrases(conversation, phrases_color_map):
+    highlighted = []  # List to store Dash components
+
+    # Helper function to apply highlighting
+    def apply_highlight(phrase, color):
+        return html.Span(children=[html.Strong(phrase)], style={"color": color})
+
+    words = conversation.split()
+    for word in words:
+        # Initialize the word_component with the word itself (no styling)
+        word_component = word
+        for phrase_group, color in phrases_color_map.items():
+            for phrase in phrase_group.split(","):
+                phrase = phrase.strip()
+                if re.match(r'\b{}\b'.format(phrase), word):
+                    # If the word matches a phrase, wrap it with the highlight
+                    word_component = apply_highlight(word, color)
+        highlighted.append(word_component)
+        highlighted.append(" ")  # Add space after each word
+
+    return highlighted
+
+
+colors = ['cyan', 'magenta', 'green', 'blue', 'orange', 'red']
+color_map = {phrase_group: color for phrase_group, color in zip(phrase_group_values, cycle(colors))} 
+
+# This line is unnecessary since you're now directly applying the highlighting in generate_transcript_utterance function.
+# df_transcript_sample['conversation'] = df_transcript_sample['conversation'].apply(lambda x: highlight_phrases(x, color_map))
+
+
+
+
+# When you're constructing your div in generate_transcript_utterance function:
+html.P(children=highlight_phrases(row["conversation"], color_map))
+
+
+
+
