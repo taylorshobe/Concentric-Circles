@@ -1,0 +1,85 @@
+
+
+def highlight_phrases(conversation, phrases_color_map):
+    # Helper function to replace matched phrase with its highlighted version
+    def apply_highlight(match, color):
+        phrase = match.group()
+        return html.Span(children=[html.Strong(phrase)], style={"color": color})
+
+    highlighted_components = []
+    remaining_start_index = 0
+
+    for phrase_group, color in phrases_color_map.items():
+        for phrase in phrase_group.split(","):
+            phrase = phrase.strip()
+            for match in re.finditer(r'\b{}\b'.format(phrase), conversation, flags=re.IGNORECASE):
+                start, end = match.span()
+
+                # Append the text that came before this match, without any highlighting
+                highlighted_components.append(html.Span(children=[conversation[remaining_start_index:start]]))
+                
+                # Append the matched phrase with highlighting
+                highlighted_components.append(apply_highlight(match, color))
+                
+                # Update the remaining_start_index to after this match
+                remaining_start_index = end
+
+    # Append any remaining text after the last match
+    highlighted_components.append(html.Span(children=[conversation[remaining_start_index:]]))
+
+    return highlighted_components
+
+
+
+
+
+
+from itertools import cycle
+
+colors = ['darkblue', 'forestgreen', 'maroon', 'purple', 'charcoal', 'teal', 'olive', 'chocolate', 'navy']
+# Assuming phrase_group_values and colors are already defined
+color_cycler = cycle(colors)
+color_map = {phrase_group: next(color_cycler) for phrase_group in phrase_group_values}
+
+
+---------------------------------------------------------------------------------------------------
+
+INCORPORATE RECORD_ID
+
+for _, row in df.iterrows():
+    # Determine the background color based on 'pcd'
+    bg_color = 'lightyellow' if row['pcd'] == 'Customer' else 'white'
+    
+    # Create Dash Div component for the conversation details
+    div_component = html.Div(
+        children=[
+            html.H5(row["pcd"], style={'margin': '0px'}),
+            html.P(row["seq"], style={'margin': '0px'}),
+            # Using the highlight_phrases function to mark certain phrases in the conversation
+            html.P(children=highlight_phrases(row["conversation"], color_map))
+        ],
+        style={
+            "background-color": bg_color,
+            'padding': '5px',
+            'border-radius': '10px',
+            'margin': '10px'
+        }
+    )
+    
+    # Create a parent Div to encapsulate the div_component and display the Record ID
+    record_div = html.Div(
+        children=[
+            html.H6(f'Record ID: {row["Record_ID"]}'),
+            div_component
+        ],
+        style={
+            'border': '2px solid black',
+            'padding': '5px',
+            'width': '80%'
+        }
+    )
+    
+    children_elements.append(record_div)
+    children_elements.append(html.Br())  # Add a break after each div
+
+
