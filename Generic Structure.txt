@@ -1,0 +1,90 @@
+
+def update_transcript():  
+    html_output = []
+    for _, row in df_transcript_sample.iterrows():
+        if row['person'] == 'Worker':
+            bg_color = 'white'
+        else:
+            bg_color = 'yellow'
+        
+        div_string = f'''
+        <div style="background-color: {bg_color}; width: 80%; padding: 5px; border-radius: 10px;">
+            <h4> {row["person"]} </h4>
+            <p>{row["seq"]}</p>
+            <p>{row["conversation"]}</p> 
+        </div>
+        <br>
+        <br>
+        '''
+        html_output.append(div_string)
+
+    # Combine all the strings into one big HTML string
+    final_html = ''.join(html_output)
+    return final_html
+
+output_string = update_transcript()
+
+
+# When you're updating the content of your Dash div:
+@app.callback(
+    Output('transcript-output', 'children'),
+    [Input('your-input-id', 'value')]
+)
+def update_output_div(input_value):
+    return dash_html_components.HTML(output_string)
+
+
+
+
+
+
+
+
+In Dash, most of the content is generated using Python functions that return Dash components, like html.Div, dcc.Graph, etc. However, there might be situations where you have raw HTML content that you want to directly insert into your layout, without converting it into Dash components.
+
+To help with such situations, Dash provides dash_html_components.HTML, which is a component that can be used to safely render raw HTML content. This can be particularly useful if you have generated your HTML content outside of Dash (e.g., the function update_transcript() that we created) and want to inject it into the Dash app.
+
+Let's break down the process step by step:
+
+Generate the Raw HTML String: Using the update_transcript() function, we generate a raw HTML string (output_string) that contains the divs for each row.
+
+Update the Dash Component: You would typically want to display this HTML string in response to some action or input in your Dash app. This might be the user pressing a button, changing a dropdown, or some other interaction.
+
+Here's an example callback to demonstrate:
+
+
+from dash import dcc, html, Input, Output
+import dash_html_components as dhc
+
+# ... Your existing Dash layout ...
+
+@app.callback(
+    Output('transcript-output', 'children'),
+    [Input('some-triggering-component-id', 'value')]  # Replace this with the actual ID of the component that triggers the update
+)
+def update_output_div(input_value):
+    # Suppose input_value determines whether or not to show the content.
+    # This is just an example condition, replace with your actual logic.
+    if input_value:
+        # Convert the raw HTML string to a Dash HTML component
+        return dhc.HTML(output_string)
+    return ""  # Return an empty string or some other default content if the condition isn't met
+
+
+
+Here's a brief explanation:
+
+The callback listens to some triggering component (replace 'some-triggering-component-id' with the actual ID of the triggering component in your app).
+When the triggering component's value changes, the callback fires.
+If the condition is met (in this case, input_value being True), the raw HTML string is wrapped inside dhc.HTML and returned to be rendered inside the transcript-output div.
+This allows you to display complex raw HTML content inside a Dash app without manually converting every part of it into Dash components.
+
+
+
+
+
+
+
+
+
+
