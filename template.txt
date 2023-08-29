@@ -1,56 +1,22 @@
-def highlight_phrases(conversation, phrases_color_map):
-    # Nested function to apply highlighting to a matched phrase
-    # Separate logic for generating a highlighted Dash component from Main logic (identify and process matches). This helps make the code more modular and readable
-    def apply_highlight(phrase, color):
-        # Return a styled Dash component to highlight the phrase
-        return html.Span(children=[html.Strong(phrase)], style={"color": color})
 
-    # Initialize an empty list to store the resulting Dash components
-    # This list will contain both the highlighted phrases and the unmatched parts of the conversation
-    highlighted_components = []
+Initialize a List for Matches: A list named matches is initialized. This list will store details about every matched phrase: its start and end positions in the conversation, the actual phrase, and its designated color.
 
-    # This list will be used to store all matches we find in the conversation
-    # Each item will be a tuple containing the start and end indices of the match, the matched phrase, and its color
-    matches = []
-    
-    # Loop through each group of phrases and their associated colors in the provided map
-    for phrase_group, color in phrases_color_map.items():
-        # Split the phrase group into individual phrases (assuming they are comma-separated)
-        for phrase in phrase_group.split(","):
-            # Remove any leading or trailing whitespace from the phrase
-            phrase = phrase.strip()
-            
-            # Use regex to find all occurrences of the current phrase in the conversation, ignoring case
-            for match in re.finditer(r'{}'.format(phrase), conversation, flags=re.IGNORECASE):
-                # Extract the start and end positions of the matched phrase
-                start, end = match.span()
-                # Add the details of this match to our matches list
-                matches.append((start, end, phrase, color))
+Iterate Through Phrases: For each group of phrases in the provided phrases_color_map dictionary, the function iterates through them. Each group might contain multiple comma-separated phrases.
 
-    # Now, we sort the matches by start position.
-    # If two matches start at the same position (i.e., overlapping), we prioritize the longer match.
-    matches.sort(key=lambda x: (x[0], -len(x[2])))
+Find Matches in the Conversation: For every individual phrase in a group, the function uses a regular expression to find all occurrences of that phrase in the conversation, regardless of its case (uppercase/lowercase).
 
-    # This variable keeps track of where we left off in the conversation after processing each match
-    remaining_start_index = 0
-    
-    # Process each match, one by one
-    for start, end, phrase, color in matches:
-        # If the current match starts after our last processed position, we avoid overlapping matches
-        if start >= remaining_start_index:
-            # Append the text from our last processed position up to the start of this match
-            # This text is not highlighted
-            highlighted_components.append(conversation[remaining_start_index:start])
-            
-            # Now, append the matched phrase with highlighting
-            highlighted_components.append(apply_highlight(phrase, color))
-            
-            # Update our last processed position to the end of the current match
-            remaining_start_index = end
+Add Details of Matches: For each identified match of a phrase, its details (start position, end position, the phrase, and its color) are added to the matches list.
 
-    # After processing all matches, there might be some remaining text in the conversation that comes after the last match
-    # We append this text without highlighting
-    highlighted_components.append(conversation[remaining_start_index:])
-    
-    # Return the list of components, which now contains both highlighted and non-highlighted parts of the conversation
-    return highlighted_components
+Sort Matches for Processing: Once all matches are identified, they are sorted. The sorting prioritizes matches based on their start position in the conversation. In case of overlaps, longer matches are prioritized.
+
+Initialize the Result List: An empty list named highlighted_components is created. This list will store both the highlighted and non-highlighted segments of the conversation.
+
+Process Sorted Matches: For each match in the sorted matches list, the function checks if the start of this match is after the end of the previously processed match to avoid overlaps.
+
+Append Unhighlighted Text: If the start of the match is valid (i.e., doesn’t overlap with the previous match), the function appends the portion of the conversation from the end of the last processed match up to the start of the current match to the highlighted_components list. This segment of the conversation is not highlighted.
+
+Apply Highlight to Match: The matched phrase is wrapped in a Dash HTML component that will change its font color and style based on its color in the phrases_color_map. This highlighted component is then appended to the highlighted_components list.
+
+Append Remaining Text: Once all matches have been processed, any remaining text in the conversation after the last match is appended to the highlighted_components list without highlighting.
+
+Return Results: The function returns the highlighted_components list, which now contains a mix of highlighted matched phrases and unhighlighted portions of the conversation.
