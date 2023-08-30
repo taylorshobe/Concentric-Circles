@@ -1,0 +1,63 @@
+
+import pandas as pd
+import re
+
+def get_daily_phrase_counts(phrase_group, sql_data):
+    """
+    phrase_group: List of phrases we're looking to match against.
+    sql_data: DataFrame containing the SQL data with 'date', 'record_id', 'utterance' columns.
+    Returns a DataFrame with the daily count of each phrase.
+    """
+
+    # Initialize a dictionary to store results
+    result_dict = {
+        'phrase': [],
+        'date': [],
+        'daily_count': []
+    }
+    
+    # For each phrase in the phrase group
+    for phrase in phrase_group:
+        # Create a regex pattern for the current phrase
+        pattern = re.compile(r'\b{}\b'.format(phrase), flags=re.IGNORECASE)
+        
+        # Check each row in the SQL data for matches
+        sql_data['match'] = sql_data['utterance'].apply(lambda x: bool(pattern.search(x)))
+        
+        # Filter only matched rows and group by 'date' and 'record_id'
+        matched_records = sql_data[sql_data['match']]
+        daily_counts = matched_records.groupby(['date', 'record_id']).size().reset_index(name='count')
+        
+        # Aggregate to get the total daily count
+        total_daily_counts = daily_counts.groupby('date')['count'].sum().reset_index()
+        
+        # Append the results to our dictionary
+        for index, row in total_daily_counts.iterrows():
+            result_dict['phrase'].append(phrase)
+            result_dict['date'].append(row['date'])
+            result_dict['daily_count'].append(row['count'])
+    
+    # Convert the dictionary to a DataFrame and return
+    result_df = pd.DataFrame(result_dict)
+    
+    return result_df
+
+
+
+# Sample phrases you're looking to match against
+phrase_group = ["help", "confirm", "identify"]  #... and so on
+
+# Assuming sql_data is already fetched from your SQL table and has columns 'date', 'record_id', and 'utterance'
+sql_data = pd.read_sql_query("YOUR QUERY TO FETCH DATA", your_connection)
+
+# Call the function
+result_df = get_daily_phrase_counts(phrase_group, sql_data)
+
+# Print the result
+print(result_df)
+
+
+
+
+
+
