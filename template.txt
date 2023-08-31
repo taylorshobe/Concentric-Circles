@@ -1,0 +1,58 @@
+import re
+import logging
+import pandas as pd
+
+# 1. Function to generate the SQL query:
+def generate_sql_query(df_clean_data):
+    unique_phrases = df_clean_data['phrase_group'].unique().tolist()    
+    phrases_cte = "\nUNION ALL\n".join([f'SELECT "{re.escape(phrase)}" AS phrase' for phrase in unique_phrases])
+
+    base_sql = """
+WITH PhrasesCTE AS (
+    {phrases_cte}
+)
+
+SELECT
+  q.date
+, q.record_id
+, q.utterance
+, p.phrase
+, COUNT(DISTINCT q.timestamp) OVER(PARTITION BY q.date, q.record_id, p.phrase) AS daily_count_per_record
+, SUM(COUNT(DISTINCT q.timestamp)) OVER(PARTITION BY q.date, p.phrase) AS total_daily_count
+FROM PhrasesCTE p
+INNER JOIN query_key q
+    ON REGEXP_CONTAINS(q.utterance, p.phrase)
+GROUP BY q.date, q.record_id, q.utterance, p.phrase
+ORDER BY p.phrase, q.date, q.record_id, q.utterance
+"""
+    
+    return base_sql.format(phrases_cte=phrases_cte)
+
+# 2. Function to execute the SQL query:
+def execute_sql(sql):
+    try:
+        # Log the SQL for auditing
+        logging.info(f"Generated SQL: \n{sql}")
+        
+        # Execute the SQL
+        logging.info("Executing SQL for results: match results")
+        gcp_cursor.execute(sql)
+        logging.info("Successfully executed SQL")
+        
+        # Fetch results and convert to DataFrame
+        columns = [desc[0] for desc in gcp_cursor.description]
+        results = gcp_cursor.fetchall()
+        result_df = pd.DataFrame.from_records(results, columns=columns)
+        return result_df
+
+    except Exception as e:
+        logging.error(f"Error while executing match results. Error: {e}")
+
+# 3. Generate the SQL and execute it
+sql = generate_sql_query(df_clean_data)
+result_df = execute_sql(sql)
+
+# 4. Displaying the first few rows of the results for inspection
+logging.info(result_df.head())
+
+print(result_df)
