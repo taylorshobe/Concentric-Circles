@@ -1,0 +1,72 @@
+
+
+import dash
+from dash import html, dcc, dbc, Output, Input, State, callback, exceptions
+from dash.dependencies import Input, Output, State
+import dash_mantine_components as dmc
+import base64
+import io
+import pandas as pd
+import pyodbc
+
+
+
+
+def save_to_bigquery(df):
+    cursor = conn.cursor()
+    
+    create_temp_table_query = """
+        CREATE TEMP TABLE your_temporary_table AS 
+        SELECT * 
+        FROM UNNEST(ARRAY<STRUCT<record_id INT64>>[]) 
+    """
+    cursor.execute(create_temp_table_query)
+    
+    data_tuples = list(df.itertuples(index=False, name=None))
+    insert_query = """
+        INSERT INTO your_temporary_table (record_id)
+        VALUES (?)
+    """
+    cursor.executemany(insert_query, data_tuples)
+    
+    conn.commit()
+
+
+
+
+
+@app.callback(
+    Output('output-data-upload', 'children'),
+    Output('upload-success-alert', 'is_open'),  # Output for the success alert
+    Input('upload-data', 'contents'),
+    State('upload-data', 'filename')
+)
+def update_output(contents, filename):
+    if contents is None:
+        raise exceptions.PreventUpdate
+
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+
+    try:
+        if 'csv' in filename:
+            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+        elif 'txt' in filename:
+            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+        elif 'xls' in filename:
+            df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            raise ValueError("Unsupported file type")
+
+        save_to_bigquery(df)  # Save to BigQuery
+
+        # If everything goes fine   
+        return None, True  # Return True to open the success alert
+
+    except ValueError as e:
+        return f"Error: {e}", False  # Return the error message and False to not open the success alert
+
+    except Exception as e:
+        return f"An unexpected error occurred: {e}", False  # Generic error message
+
+
