@@ -1,0 +1,98 @@
+
+
+# Your earlier layout for the file upload content
+upload_file_layout = dbc.Card([
+    dbc.CardHeader([
+        dbc.Row([
+            dbc.Col(html.H1('Upload File', className="display-6",
+                            style={'text-align': 'right', 'color': '#10000'}), width=11),
+            dbc.Col(html.Img(src='assets/upload_icon.png', height=60, width=60, style={'float': 'right'}),
+                    width=1)
+        ], align='center', style={'margin-bottom': '5px', 'margin-top': '5px'}),
+    ], style={'margin-bottom': '0px', 'border-bottom': '0px', 'background-color': '#FFFFFF'}),
+
+    dbc.CardBody([
+        dbc.Row([
+            dbc.Col(upload_success_alert, width=12)
+        ]),
+        dbc.Row([
+            dbc.Col([
+                dcc.Upload(
+                    id='upload-data',
+                    children=html.Div([
+                        'Drag and Drop or ',
+                        html.A('Select Files')
+                    ]),
+                    style={
+                        'width': '100%',
+                        'height': '60px',
+                        'lineHeight': '60px',
+                        'borderWidth': '1px',
+                        'borderStyle': 'dashed',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'margin': '10px',
+                        'background': 'black',
+                        'color': 'white'
+                    },
+                    multiple=False
+                ),
+                html.Div(id='output-data-upload'),
+                html.Div(id='time-elapsed'),
+                html.Br(),  # Adding the line break as you requested
+                dash_table.DataTable(
+                    id='table-preview',
+                    columns=[{"name": "Record_ID", "id": "Record_ID"}], 
+                    page_size=10, 
+                    style_cell={'textAlign': 'center'},  # Center alignment of table contents
+                ),
+            ], width=12)
+        ]),
+    ], style={'height': '85vh', 'overflow-y': 'auto'}),
+], style={'height': '98vh', 'overflow-y': 'hidden'})
+
+# New layout for password protection
+upload_file_page = html.Div([
+    dbc.Input(id="password-input", type="password", placeholder="Enter password", debounce=True),
+    html.Button('Submit', id='password-button'),
+    html.Div(id='password-alert'),  # For displaying error message if the password is wrong
+    html.Div(id='file-upload-content')  # This will display the file upload content after the correct password is entered
+])
+
+
+
+
+
+
+
+
+upload_file_page = html.Div([
+    dbc.Input(id="password-input", type="password", placeholder="Enter password", debounce=True),
+    html.Button('Submit', id='password-button'),
+    html.Div(id='password-alert'),  # This will display an error message if the password is wrong
+    html.Div(id='file-upload-content')  # This will display the file upload content after the correct password is entered
+])
+
+
+
+
+
+
+# Define a constant for the correct password (For demonstration purposes. Ideally, you would want a more secure method.)
+CORRECT_PASSWORD = "1234"
+
+@app.callback(
+    [Output('file-upload-content', 'children'),
+     Output('password-input', 'style'),
+     Output('password-button', 'style'),
+     Output('password-alert', 'children')],
+    [Input('password-button', 'n_clicks')],
+    [State('password-input', 'value')]
+)
+def display_content(n, password_entered):
+    if n:  # Only run after the button has been clicked
+        if password_entered == CORRECT_PASSWORD:
+            return upload_file_layout, {'display': 'none'}, {'display': 'none'}, ''  # Hide password input and display file upload layout
+        else:
+            return None, {}, {}, 'Incorrect Password. Please try again.'  # Display an error message
+    return None, {}, {}, ''  # Default state (hide upload layout, show password input)
