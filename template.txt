@@ -1,0 +1,114 @@
+
+@callback(
+    Output("block-match", "value", allow_duplicate=True),
+    Output("block-a-operator", "on", allow_duplicate=True),
+    Output("block-b-operator", "on", allow_duplicate=True),
+    Output("block-c-operator", "on", allow_duplicate=True),
+    Output("block-d-operator", "on", allow_duplicate=True),
+    Output("block-e-operator", "on", allow_duplicate=True),
+    Output("block-match", 'options'),
+
+    Input("query-load-button", "n_clicks"),
+    Input("phrase-grid", "cellValueChanged"),  # Any change to grid
+    State("phrase-grid", "rowData"),
+    prevent_initial_call=True
+)
+def force_block_match(load_clicks, phrase_grid_changes, phrase_grid_data):
+    interactions = ctx.triggered_id
+    logging.info(f"Force Block Options: triggering interactions: {interactions}")  # <--- LOGGING HERE
+
+    # Convert phrase_grid_data to DataFrame
+    df_phrase_grid = pd.DataFrame(phrase_grid_data)
+
+    # Calculate exclude_count for all blocks
+    exclude_count = 0 
+    if not phrase_grid_data == [] else len(df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches')
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ])
+
+    # Calculate exclude_counts for individual blocks
+    a_exclude_count = 0 if phrase_grid_data == [] else len(df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches') 
+        & (df_phrase_grid['Block'] == 'A')
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ])
+
+    b_exclude_count = 0 if phrase_grid_data == [] else len(df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches') 
+        & (df_phrase_grid['Block'] == 'B')
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ])
+
+    c_exclude_count = 0 if phrase_grid_data == [] else len(df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches') 
+        & (df_phrase_grid['Block'] == 'C')
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ])
+
+    d_exclude_count = 0 if phrase_grid_data == [] else len(df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches') 
+        & (df_phrase_grid['Block'] == 'D')
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ])
+
+    e_exclude_count = 0 if phrase_grid_data == [] else len(df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches') 
+        & (df_phrase_grid['Block'] == 'E')
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ])
+
+    # Set the Block Match value to require all blocks
+    all_block_match_val = 'All' if exclude_count >= 1 else no_update
+    all_block_match_opt = [{"label": "Any Block", "value": 'Any', 'disabled': True}, {"label": "All Blocks", "value": 'All'}] if exclude_count >= 1 else [{"label": "Any Block", "value": 'Any'}, {"label": "All Blocks", "value": 'All'}]
+
+    # Set the A-E block match value if A-E block includes a 'Exclude' phrase
+    a_block_match_val = True if a_exclude_count >= 1 else no_update
+    b_block_match_val = True if b_exclude_count >= 1 else no_update
+    c_block_match_val = True if c_exclude_count >= 1 else no_update
+    d_block_match_val = True if d_exclude_count >= 1 else no_update
+    e_block_match_val = True if e_exclude_count >= 1 else no_update
+
+    return all_block_match_val, a_block_match_val, b_block_match_val, c_block_match_val, d_block_match_val, e_block_match_val, all_block_match_opt
+
+
+
+
+
+
+
+
+
+
+@callback(
+    Output("block-match", "options"),
+    Input("query-load-button", "n_clicks"),
+    Input("phrase-grid", "cellValueChanged"),
+    State("phrase-grid", "rowData"),
+    prevent_initial_call=True
+)
+def force_block_match(load_clicks, phrase_grid_changes, phrase_grid_data):
+
+    # Convert phrase_grid_data to DataFrame
+    df_phrase_grid = pd.DataFrame(phrase_grid_data)
+
+    # Check if any block has a standalone "Exclude Matches"
+    exclude_exists = df_phrase_grid[
+        (df_phrase_grid['Phrase Operator'] == 'Exclude Matches') 
+        & (df_phrase_grid.groupby('Block')['Block'].transform('count') == 1)
+    ].shape[0] > 0  # This returns True if any standalone "Exclude Matches" exists
+
+    # Update options based on the condition
+    if exclude_exists:
+        all_block_match_opt = [
+            {"label": "Any Block", "value": 'Any', 'disabled': True},
+            {"label": "All Blocks", "value": 'All'}
+        ]
+    else:
+        all_block_match_opt = [
+            {"label": "Any Block", "value": 'Any'},
+            {"label": "All Blocks", "value": 'All'}
+        ]
+
+    return all_block_match_opt
+
